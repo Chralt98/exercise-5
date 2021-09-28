@@ -47,12 +47,27 @@ impl frame_system::Config for Test {
 	type BlockHashCount = BlockHashCount;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<u64>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
 	type SS58Prefix = SS58Prefix;
 	type OnSetCode = ();
+}
+
+parameter_types! {
+	pub const ExistentialDeposit: u64 = 1;
+}
+impl pallet_balances::Config for Test {
+	type MaxLocks = ();
+	type Balance = u64;
+	type Event = Event;
+	type DustRemoval = ();
+	type ExistentialDeposit = ExistentialDeposit;
+	type AccountStore = System;
+	type WeightInfo = ();
+	type MaxReserves = ();
+	type ReserveIdentifier = ();
 }
 
 parameter_types! {
@@ -83,10 +98,8 @@ impl Config for Test {
 	type Event = Event;
 	type Randomness = MockRandom;
 	type Currency = Balances;
-	type WeightInfo = ();
 }
 
-// Build genesis storage according to the mock runtime.
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
@@ -110,8 +123,8 @@ fn can_create() {
 
 		let kitty = Kitty([59, 250, 138, 82, 209, 39, 141, 109, 163, 238, 183, 145, 235, 168, 18, 122]);
 
-		assert_eq!(KittiesModule::kitties(100, 0), Some(kitty.clone()));
-		assert_eq!(KittiesModule::next_kitty_id(), 1);
+		assert_eq!(KittiesModule::kitties(&100, 0), Some(kitty.clone()));
+		assert_eq!(Nft::tokens(KittiesModule::class_id(), 0).unwrap().owner, 100);
 
 		System::assert_last_event(Event::KittiesModule(crate::Event::<Test>::KittyCreated(100, 0, kitty)));
 	});
@@ -140,8 +153,8 @@ fn can_breed() {
 
 		let kitty = Kitty([187, 250, 235, 118, 211, 247, 237, 253, 187, 239, 191, 185, 239, 171, 211, 122]);
 
-		assert_eq!(KittiesModule::kitties(100, 2), Some(kitty.clone()));
-		assert_eq!(KittiesModule::next_kitty_id(), 3);
+		assert_eq!(KittiesModule::kitties(&100, 2), Some(kitty.clone()));
+		assert_eq!(Nft::tokens(KittiesModule::class_id(), 2).unwrap().owner, 100);
 
 		System::assert_last_event(Event::KittiesModule(crate::Event::<Test>::KittyBred(100u64, 2u32, kitty)));
 	});
@@ -149,17 +162,15 @@ fn can_breed() {
 
 #[test]
 fn can_transfer() {
+	// TODO: update this test to check the updated behaviour regards to KittyPrices
 	new_test_ext().execute_with(|| {
 		assert_ok!(KittiesModule::create(Origin::signed(100)));
 
-		assert_noop!(KittiesModule::transfer(Origin::signed(101), 200, 0), Error::<Test>::InvalidKittyId);
+		assert_noop!(KittiesModule::transfer(Origin::signed(101), 200, 0), orml_nft::Error::<Test>::NoPermission);
 
 		assert_ok!(KittiesModule::transfer(Origin::signed(100), 200, 0));
 
-		let kitty = Kitty([59, 250, 138, 82, 209, 39, 141, 109, 163, 238, 183, 145, 235, 168, 18, 122]);
-
-		assert_eq!(KittiesModule::kitties(200, 0), Some(kitty));
-		assert_eq!(Kitties::<Test>::contains_key(100, 0), false);
+		assert_eq!(Nft::tokens(KittiesModule::class_id(), 0).unwrap().owner, 200);
 
 		System::assert_last_event(Event::KittiesModule(crate::Event::KittyTransferred(100, 200, 0)));
 	});

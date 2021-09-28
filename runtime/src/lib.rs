@@ -275,7 +275,12 @@ impl pallet_template::Config for Runtime {
 impl pallet_kitties::Config for Runtime {
 	type Event = Event;
 	type Randomness = RandomnessCollectiveFlip;
-	type KittyIndex = u32;
+	type Currency = Balances;
+}
+
+parameter_types! {
+	pub const MaxClassMetadata: u32 = 0;
+	pub const MaxTokenMetadata: u32 = 0;
 }
 
 impl orml_nft::Config for Runtime {
