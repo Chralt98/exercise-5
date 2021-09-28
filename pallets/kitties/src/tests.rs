@@ -18,7 +18,9 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		KittiesModule: kitties::{Pallet, Call, Storage, Event<T>},
+		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
+		KittiesModule: kitties::{Pallet, Call, Storage, Event<T>, Config},
+		Nft: orml_nft::{Pallet, Storage, Config<T>},
 	}
 );
 
@@ -63,15 +65,40 @@ impl Randomness<H256, u64> for MockRandom {
     }
 }
 
+parameter_types! {
+	pub const MaxClassMetadata: u32 = 0;
+	pub const MaxTokenMetadata: u32 = 0;
+}
+
+impl orml_nft::Config for Test {
+	type ClassId = u32;
+	type TokenId = u32;
+	type ClassData = ();
+	type TokenData = Kitty;
+	type MaxClassMetadata = MaxClassMetadata;
+	type MaxTokenMetadata = MaxTokenMetadata;
+}
+
 impl Config for Test {
 	type Event = Event;
 	type Randomness = MockRandom;
-	type KittyIndex = u32;
+	type Currency = Balances;
+	type WeightInfo = ();
 }
 
 // Build genesis storage according to the mock runtime.
+// Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	let mut t: sp_io::TestExternalities = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap().into();
+	let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
+
+	pallet_balances::GenesisConfig::<Test>{
+		balances: vec![(200, 500)],
+	}.assimilate_storage(&mut t).unwrap();
+
+	<crate::GenesisConfig as GenesisBuild<Test>>::assimilate_storage(&crate::GenesisConfig::default(), &mut t).unwrap();
+
+	let mut t: sp_io::TestExternalities = t.into();
+
 	t.execute_with(|| System::set_block_number(1) );
 	t
 }
@@ -120,4 +147,38 @@ fn can_breed() {
 	});
 }
 
-// TODO: add new test cases for `fn transfer`. Make sure you have covered edge cases
+#[test]
+fn can_transfer() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(KittiesModule::create(Origin::signed(100)));
+
+		assert_noop!(KittiesModule::transfer(Origin::signed(101), 200, 0), Error::<Test>::InvalidKittyId);
+
+		assert_ok!(KittiesModule::transfer(Origin::signed(100), 200, 0));
+
+		let kitty = Kitty([59, 250, 138, 82, 209, 39, 141, 109, 163, 238, 183, 145, 235, 168, 18, 122]);
+
+		assert_eq!(KittiesModule::kitties(200, 0), Some(kitty));
+		assert_eq!(Kitties::<Test>::contains_key(100, 0), false);
+
+		System::assert_last_event(Event::KittiesModule(crate::Event::KittyTransferred(100, 200, 0)));
+	});
+}
+
+#[test]
+fn handle_self_transfer() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(KittiesModule::create(Origin::signed(100)));
+
+		System::reset_events();
+
+		assert_noop!(KittiesModule::transfer(Origin::signed(100), 100, 1), orml_nft::Error::<Test>::TokenNotFound);
+
+		assert_ok!(KittiesModule::transfer(Origin::signed(100), 100, 0));
+
+		assert_eq!(Nft::tokens(KittiesModule::class_id(), 0).unwrap().owner, 100);
+
+		// no transfer event because no actual transfer is executed
+		assert_eq!(System::events().len(), 0);
+	});
+}
