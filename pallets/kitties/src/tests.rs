@@ -58,6 +58,7 @@ impl frame_system::Config for Test {
 parameter_types! {
 	pub const ExistentialDeposit: u64 = 1;
 }
+
 impl pallet_balances::Config for Test {
 	type MaxLocks = ();
 	type Balance = u64;
@@ -162,7 +163,6 @@ fn can_breed() {
 
 #[test]
 fn can_transfer() {
-	// TODO: update this test to check the updated behaviour regards to KittyPrices
 	new_test_ext().execute_with(|| {
 		assert_ok!(KittiesModule::create(Origin::signed(100)));
 
